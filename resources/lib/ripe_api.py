@@ -32,33 +32,39 @@ def set_debug(debug_flag, func_log=l.local_log):
 
 def get_events():
     """This function gest all the RIPE events from the RIPE website."""
-    event_entry_sep       = '<tr>'
-    event_section_sep     = '<td>'
-    event_pattern         = '(ripe[0-9]+)'
+    event_entry_sep       = '<div class="grid grid-flow-row'
     name_pattern          = '>(RIPE [^<]+)'
-    field_pattern         = '<p data-block-key="[^"]+">([^<]+)</p>'
+    event_pattern         = '([0-9]+)'
+    site_pattern          = 'md:text-end">([^<]+)</span>'
+    date_pattern          = '<time datetime="[-0-9]+">([^<]+)</time>'
 
-    buffer_url = l.carga_web("https://www.ripe.net/membership/meetings/ripe-meetings/archive")
     events_list = []
-    names_list = []
-    for event_section in buffer_url.split(event_entry_sep)[2:]:
-        ripe_event = l.find_first(event_section, event_pattern)
-        if ripe_event == "ripe60": # From this event to backwards there are no playable videos
-            break                  # into the presentations section.
-        event_url = 'https://%s.ripe.net/archives/' % ripe_event
-        event_name = l.find_first(event_section, name_pattern)
-        names_list.append(event_name)
-        section_fields = event_section.split(event_section_sep)
-        if len(section_fields) == 4:
-            site_name = l.find_first(section_fields[2], field_pattern)
-            dates = l.find_first(section_fields[3], field_pattern)
-        else:
-            site_name = ""
-            dates = ""
+    last_page = False
+    for page in range(1, 4):
+        buffer_url = l.carga_web('https://www.ripe.net/meetings/ripe-meetings/archive/?page=%s' % page)
+        for event_section in buffer_url.split(event_entry_sep)[1:]:
+            event_name = l.find_first(event_section, name_pattern)
+            ripe_event = l.find_first(event_name, event_pattern)
+            if ripe_event == "60": # From this event to backwards there are no playable videos
+                last_page = True
+                break # Into the presentations section.
+            event_url = 'https://ripe%s.ripe.net/archives/' % ripe_event
+            site_name = l.find_first(event_section, site_pattern)
+            dates_list = l.find_multiple(event_section, date_pattern)
+            if len(dates_list) == 2:
+                if dates_list[0][3:] == dates_list[1][3:]:
+                    dates = '%s - %s' % (dates_list[0][:2], dates_list[1])
+                else:
+                    dates = '%s - %s' % (dates_list[0], dates_list[1])
+            else:
+                dates = ""
 
-        event_title = '%s - %s (%s)' % (event_name, site_name, dates)
-        l.log('event url: "%s" name: "%s" site: "%s" dates: "%s"' % (event_url, event_name, site_name, dates))
-        events_list.append((event_url, event_title, site_name))
+            event_title = '%s - %s (%s)' % (event_name, site_name, dates)
+            l.log('event url: "%s" name: "%s" site: "%s" dates: "%s"' % (event_url, event_name, site_name, dates))
+            events_list.append((event_url, event_title, site_name))
+
+        if last_page:
+            break # Stop loading more pages.
 
     return events_list
 
@@ -67,7 +73,7 @@ def get_videolist(url):
     """This function gets the video list from the RIPE website and returns them in a pretty data format."""
     video_table_sep        = '<li><a href='
     video_url_pattern      = '"(.*?)"'
-    root_url_pattern       = '(https://ripe[0-9]+\.ripe\.net)'
+    root_url_pattern       = r'(https://ripe[0-9]+\.ripe\.net)'
     video_title_pattern    = '>(.*?)</a>'
     video_speaker_sep      = ' - '
     url_subpath            = '/archives/'
@@ -129,7 +135,7 @@ def get_playable_url(url):
     """This function returns a playable URL fetching the video sources available"""
     video_url_pattern = '(/archive/video/.*?mp4)["\']'
     video_url_altpatt = '(/videos/.*?mp4)["\']'
-    root_url_pattern  = '(https://ripe[0-9]+\.ripe\.net)'
+    root_url_pattern  = r'(https://ripe[0-9]+\.ripe\.net)'
 
     if url.endswith('mp4'):
         # The URL is already playable.
